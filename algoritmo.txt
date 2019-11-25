@@ -1,0 +1,135 @@
+// servidor.c
+typedef struct dogType_s {} dogType;
+typedef struct tabla_s {} tabla;
+main {};
+while {
+	crea el servidor
+	loop {
+		recibir cliente;
+		semaforo : tenemos menos que 32 clientes ? // ? Pero solo podemos tener 16 hilos
+		join hilo x // ?
+		create hilo x(cliente)
+	}
+}
+hilo {
+	recibe mensaje del cliente;
+	va en la funcion que necesita
+	escribir(log)
+	salir
+}
+ingresar {
+	recibir dogType
+	open semaforo
+	new hash, ...
+	close semaforo
+	enviar clave
+}
+ver {
+	recibir clave
+	si existe {
+		enviar(SUCCESS)
+		open semaforo
+		leer dog(clave)
+		close semaforo
+		enviar(dog(clave))
+		recibir(archivo?)
+		si archivo {
+			open semaforo
+			leer(archivo)
+			enviar(archivo)
+			recibir(cambio?)
+			si cambio {
+				recibir(archivo)
+				escribir(archivo)
+			}
+			close semaforo
+		}
+	}
+	sino {
+		enviar(FAILURE)
+	}
+}
+borrar {
+recibir clave
+	si existe {
+		enviar(SUCCESS)
+		open semaforo
+		borrar(clave)
+		close semaforo
+	sino {
+		enviar(FAILURE)
+	}
+}
+buscar {
+	recibir(string)
+	open semaforo
+	buscar(string)
+	close semaforo
+	enviar(numeroDeDatos) // 16
+	enviar(Datos) // (Mario, 1), (Mario, 3), (Mario, 16), ...
+}
+
+
+escribir/enviar/recibir {
+	r = 0;
+	while(r < numeroDeDatos){
+		r += escribir/enviar/recibir
+	}
+}
+
+
+
+// cliente.c
+typedef struct dogType_s {} dogType;
+termios
+
+menu {}
+
+ingresar {
+	scanf()...
+	dogType newDog = datos
+	enviar(newDog)
+	recibir(clave)
+}
+ver {
+	scanf(clave)
+	enviar(clave)
+	recibir(existe?)
+	si existe {
+		recibir(dogType)
+		print(dog)
+		scanf(archivo?)
+		si archivo {
+			enviar(SI)
+			recibir(archivo)
+			leer la ultima fecha de modificacion -> fecha1
+			abrir(archivo)
+			leer la ultima fecha de modificacion -> fecha2
+			enviar(fecha1 == fecha2)
+			if fecha1 != fecha2 {
+				enviar(archivo)
+			}
+		}
+		sino {
+			enviar(NO)
+		}
+	}
+}
+borrar {
+	scanf(clave)
+	enviar(clave)
+	recibir(existe?)
+	print(si existe)
+}
+buscar {
+	scanf(string)
+	enviar(string)
+	recibir(numeroDeDatos)
+	recibir(Datos)
+	print como en p1 
+}
+
+salir {
+exit(exit code)
+}
+

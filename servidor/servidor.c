@@ -7,7 +7,6 @@ sprimos primos;    // 5MB
 sem_t *accesoADatos;
 sem_t *clientes;
 
-
 int main(int argc, char* argv[]) {
   int r;
   uint i;
@@ -107,6 +106,13 @@ int main(int argc, char* argv[]) {
 
 void *hilosfuncion(void *ap){
 	int clientfd = (int) ap[0], r, buffer;
+	ap[0] = 0;
+	string registroCadena[SIZE_GRANDE];
+	time_t t = time(NULL);
+	truct tm tm = *localtime(&t);
+	// printf("now: %d-%02d-%02d %02d:%02d:%02d\n" tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+	string log[numero];
+	sprintf(log, "%04d%02d%02dT%02d%02d%02d", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
 	r = recv(clientfd, &buffer, 1, 0);
 	//error
 	switch(buffer){
@@ -125,10 +131,11 @@ void *hilosfuncion(void *ap){
 	default:
 		ERROR(1, fprintf(stderr, "Cliente no envia el buen mensaje"));
 	}
+	close(clientfd);
 }
 
 void servidor(){
-	int r, serverfd, clientfd, on=1, i, data[NUMHILOS];
+	int r, serverfd, clientfd, on=1, i;
 	struct sockaddr_in server, client;
 	socklen_t len;
 	pthread_t tfd[NUMHILOS];
@@ -162,13 +169,19 @@ void servidor(){
 		ERROR(clientfd == -1,
 		      perror("accept"));
 
-		data[i] = clientfd;
-		pthread_create(&tfd[i], NULL, hilosfuncion, data+i);
+		//semaforo
+		clientes = sem_open("clientes", O_CREAT, 0700, NUMCLIENTES);
+		pthread_create(&tfd[i], NULL, hilosfuncion, &clientfd);
 		i++;
-		if(i >= NUMHILOS) {
+		if(i > NUMCLIENTES){
 			i = 0;
 		}
+		while(clientfd != 0){
+			sleep(1);
+		}
+		
 	}
+	/*
 	if(argc > 1){
 		r = send(clientfd, argv[1], sizeof(argv[1]), 0);
 	}
@@ -177,8 +190,7 @@ void servidor(){
 	}
 	ERROR(r == -1,
 	      perror("send"););
-	
-	close(clientfd);
+	*/
 	close(serverfd);
 	return EXIT_SUCCESS;
 

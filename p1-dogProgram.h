@@ -7,6 +7,7 @@
 #include <sys/wait.h>
 #include <termios.h>  // para cualquier tecla
 #include <unistd.h>
+#include <time.h>
 
 #define ARCHIVO "dataDogs.dat"
 #define PRIMOS "primos.dat"

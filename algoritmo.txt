@@ -1,28 +1,26 @@
 // servidor.c
 typedef struct dogType_s {} dogType;
 typedef struct tabla_s {} tabla;
-main {};
-while {
-	crea el servidor
-	loop {
-		recibir mensaje
-		si es un nuevo cliente y hay menos que 32 clientes:
-			 anadirlo a una tabla de 32;
-			 enviar mensaje al cliente;
-		sino si es un nuevo cliente:
-			 enviar mensaje de error al cliente;
-		sino:
-			// ? semaforo : tenemos menos que 32 clientes
-			join hilo x
-			create hilo x(cliente, IP, funcion)
+main {
+crea el servidor
+	while {
+	  clientfd = listen()
+		open semaforo(clientes)
+		join hilo
+		create hilo(&clientfd)
+		while(clientfd != 0){
+		  sleep()
+		}
 	}
 }
 hilo {
+	recibir mensaje
 	r = funcion que necesita
 	log = "fecha cliente IP funcion r"
 	open semaforo(log)
 	escribir(log)
 	close semaforo(log)
+	close semaforo(clientes)
 }
 
 ingresar {

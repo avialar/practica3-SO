@@ -5,18 +5,26 @@ main {};
 while {
 	crea el servidor
 	loop {
-		recibir cliente;
-		semaforo : tenemos menos que 32 clientes ? // ? Pero solo podemos tener 16 hilos
-		join hilo x // ?
-		create hilo x(cliente)
+		recibir mensaje
+		si es un nuevo cliente y hay menos que 32 clientes:
+			 anadirlo a una tabla de 32;
+			 enviar mensaje al cliente;
+		sino si es un nuevo cliente:
+			 enviar mensaje de error al cliente;
+		sino:
+			// ? semaforo : tenemos menos que 32 clientes
+			join hilo x
+			create hilo x(cliente, IP, funcion)
 	}
 }
 hilo {
-	recibe mensaje del cliente;
-	va en la funcion que necesita
+	r = funcion que necesita
+	log = "fecha cliente IP funcion r"
+	open semaforo(log)
 	escribir(log)
-	salir
+	close semaforo(log)
 }
+
 ingresar {
 	recibir dogType
 	open semaforo
@@ -28,13 +36,13 @@ ver {
 	recibir clave
 	si existe {
 		enviar(SUCCESS)
-		open semaforo
+		open semaforo(dogtypes)
 		leer dog(clave)
-		close semaforo
+		close semaforo(dogtypes)
 		enviar(dog(clave))
 		recibir(archivo?)
 		si archivo {
-			open semaforo
+			open semaforo(dogtypes)
 			leer(archivo)
 			enviar(archivo)
 			recibir(cambio?)
@@ -42,7 +50,7 @@ ver {
 				recibir(archivo)
 				escribir(archivo)
 			}
-			close semaforo
+			close semaforo(dogtypes)
 		}
 	}
 	sino {
@@ -53,20 +61,23 @@ borrar {
 recibir clave
 	si existe {
 		enviar(SUCCESS)
-		open semaforo
+		open semaforo(dogtypes)
 		borrar(clave)
-		close semaforo
+		close semaforo(dogtypes)
 	sino {
 		enviar(FAILURE)
 	}
 }
 buscar {
 	recibir(string)
-	open semaforo
+	open semaforo(dogtypes)
 	buscar(string)
-	close semaforo
-	enviar(numeroDeDatos) // 16
-	enviar(Datos) // (Mario, 1), (Mario, 3), (Mario, 16), ...
+	close semaforo(dogtypes)
+	enviar(numeroDeDatos) // ej: 16
+	loop:
+		enviar(Datos) // ej: (Mario, 1), (Mario, 3), (Mario, 16), ...
+		recibir(cuantosdatos?)
+	
 }
 
 
@@ -125,7 +136,9 @@ buscar {
 	scanf(string)
 	enviar(string)
 	recibir(numeroDeDatos)
-	recibir(Datos)
+	loop:
+		recibir(Datos)
+		enviar(cuantosdatos)
 	print como en p1 
 }
 

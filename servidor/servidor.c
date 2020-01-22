@@ -1,7 +1,12 @@
 #include "p1-dogProgram.h"
+#define NUMCLIENTES 32
+#define ACCESO 1
 
 tabla hash_table;  // 76MB
 sprimos primos;    // 5MB
+sem_t *accesoADatos;
+sem_t *clientes;
+
 
 int main(int argc, char* argv[]) {
   int r;
@@ -122,26 +127,12 @@ void *hilosfuncion(void *ap){
 	}
 }
 
-int hilos(){ // gcc -lpthread
-	pthread_t tfd[NUMHILOS];
-	int i, data[NUMHILOS];
-	
-	for(i = 0; i < NUMHILOS; i++){
-		data[i] = i;
-		pthread_create(&tfd[i], NULL, funcion, data+i);
-	}
-	for(i = 0; i < NUMHILOS; i++){
-		pthread_join(tfd[i], NULL);
-	}
-	return EXIT_SUCCESS;
-}
-
-
 void servidor(){
-	int r, serverfd, clientfd, on=1;
+	int r, serverfd, clientfd, on=1, i, data[NUMHILOS];
 	struct sockaddr_in server, client;
 	socklen_t len;
 	pthread_t tfd[NUMHILOS];
+	// crear servidor
 	serverfd = socket(AF_INET, SOCK_STREAM, 0);
 	ERROR(serverfd == -1,
 	      perror("socket");
@@ -160,15 +151,23 @@ void servidor(){
 	r = bind(serverfd, (struct sockaddr*) &server, len);
 	ERROR(r == -1,
 	      perror("bind"););
+	// done
+	i = 0;
 	while (1) {
-	
 		r = listen(serverfd, BACKLOG);
 		ERROR(r == -1,
-		      perror("listen"););
+		      perror("listen"));
 		
 		clientfd = accept(serverfd, (struct sockaddr*) &client, &len);
 		ERROR(clientfd == -1,
-		      perror("accept"););
+		      perror("accept"));
+
+		data[i] = clientfd;
+		pthread_create(&tfd[i], NULL, hilosfuncion, data+i);
+		i++;
+		if(i >= NUMHILOS) {
+			i = 0;
+		}
 	}
 	if(argc > 1){
 		r = send(clientfd, argv[1], sizeof(argv[1]), 0);
@@ -185,38 +184,20 @@ void servidor(){
 
 }
 
-void ingresar() {
+void ingresar(clientfd) {
   int r;
   dogType* new = (dogType*)malloc(sizeof(dogType));
   ulong key, id;
   FILE* archivo;
-  printf("Cual es el nombre de la mascota?\n");
-  r = scanf("%s", new->nombre);
-  ERROR(r == 0, perror("scanf"); free(new));
-  printf("Cual es su tipo?\n");
-  r = scanf("%s", new->tipo);
-  ERROR(r == 0, perror("scanf"); free(new));
-  printf("Cual es su edad?\n");
-  r = scanf("%lu", &new->edad);
-  ERROR(r == 0, perror("scanf"); free(new));
-  printf("Cual es su raza?\n");
-  r = scanf("%s", new->raza);
-  ERROR(r == 0, perror("scanf"); free(new));
-  printf("Cual es su estatura (en cm)?\n");
-  r = scanf("%lu", &new->estatura);
-  ERROR(r == 0, perror("scanf"); free(new));
-  printf("Cual es su peso (en Kg)?\n");
-  r = scanf("%lf", &new->peso);
-  ERROR(r == 0, perror("scanf"); free(new));
-  printf("Cual es su sexo?\n");
-  getchar();
-  r = scanf("%c", &new->sexo);
-  ERROR(r == 0, perror("scanf"); free(new));
 
+  r = recv(clientfd, new, sizeof(dogType), 0);
+
+  sem_wait(accesoADatos);
+  
   key = new_hash(new->nombre);
   id = hash(key);
   if (hash_table.id[id] == key) {
-    printf("Key : %lu\n", key);
+	  // bueno
   } else {
     ERROR(1, fprintf(stderr, "Error in new_hash\n"); free(new));
   }
@@ -232,10 +213,14 @@ void ingresar() {
   fwrite(new, sizeof(dogType), 1, archivo);
   fclose(archivo);
 
+  sem_post(accesoADatos);
+
+  r = send(clientfd, key, sizeof(key), 0);
+
   free(new);
 }
 
-void ver() {
+void ver(clientfd) {
   int r, buffersize;
   ulong key, id, key2;
   dogType* mascota;
@@ -255,13 +240,18 @@ void ver() {
   */
 
   printf("Hay %ld numeros presentes.\nCual es la clave de la mascota?\n",
-         hash_table.numero_de_datos);
-  r = scanf("%ld", &key);
+         hash_table.numero_de_datos); //eso lo olvidamos
+  r = recv(clientfd, &key, sizeof(int), 0);
   ERROR(r == 0, perror("scanf"));
   id = hash(key);
   if (hash_table.id[id] != key) {
+	  r = send(clientfd, FALSE, 1, 0);
     return;
   }
+  r = send(clientfd, TRUE, 1, 0);
+
+  sem_wait(accesoADatos);
+  
   mascota = (dogType*)malloc(sizeof(dogType));
   archivo = fopen(ARCHIVO, "r");
   ir_en_linea(archivo, id);
@@ -274,11 +264,14 @@ void ver() {
   r = fread(mascota, sizeof(dogType), 1, archivo);
   ERROR(r == 0, perror("fread"); free(mascota); fclose(archivo));
   fclose(archivo);
-  printf(
-      "Nombre : %s\nTipo : %s\nEdad : %ld\nRaza : %s\nEstatura : %ld\nPeso : "
-      "%.12lf\nSexo : %c\n",
-      mascota->nombre, mascota->tipo, mascota->edad, mascota->raza,
-      mascota->estatura, mascota->peso, mascota->sexo);
+
+  sem_post(accesoADatos);
+  
+  r = send(clientfd, mascota, sizeof(dogType), 0);
+
+  r = recv(clientfd, &l, sizeof(char), 0);
+
+  // semaforo?
 
   // existe la historia clinica?
 
@@ -316,87 +309,30 @@ void ver() {
   fclose(archivo);
   // existe
 
-  printf("Quiere abrir la historia clinica de %s? [S/N]\n", mascota->nombre);
-  l = 0;
-  while (l != 'S' && l != 's' && l != 'N' && l != 'n') {  // [S/N]
-    r = scanf("%c", &l);
-    ERROR(r == 0, perror("scanf"); free(mascota));
-  }
   if (l == 'S' || l == 's') {  // abrir historia clinica
-    pid = fork();
-    ERROR(pid == -1, perror("can't fork"));
-    if (pid == 0) {  // hijo
-      char env1[32], env2[32], env3[64];
-
-      char
-          /*
-           *caml    = getenv("CAML_LD_LIBRARY_PATH"),
-           *dbus    = getenv("DBUS_SESSION_BUS_ADDRESS"),
-           */
-          *display = getenv("DISPLAY"),  // para X11
-          /*
-           *editor  = getenv("EDITOR"),
-           *home    = getenv("HOME"),
-           *invocid = getenv("INVOCATION_ID"),
-           *journ   = getenv("JOURNAL_STREAM"),
-           *lang    = getenv("LANG"),
-           *less    = getenv("LESSOPEN"),
-           *logn    = getenv("LOGNAME"),
-           *mail    = getenv("MAIL"),
-           *moz     = getenv("MOZ_PLUGIN_PATH"),
-           *ocaml   = getenv("OCAML_TOPLEVEL_PATH"),
-           *oldpwd  = getenv("OLDPWD"),
-           *opam    = getenv("OPAM_SWITCH_PREFIX "),
-           *path    = getenv("PATH"),
-           *prompt  = getenv("PROMPT"),
-           *pwd     = getenv("PWD"), // para abrir
-           *shell   = getenv("SHELL"),
-           *shlvl   = getenv("SHLVL"),
-           */
-          *term = getenv("TERM"),             // para consola
-                                              /*
-                                               *tmux0   = getenv("TMUX"),
-                                               *tmux1   = getenv("TMUX_PANE"),
-                                               *user    = getenv("USER"),
-                                               *winid   = getenv("WINDOWID"),
-                                               */
-              *xauth = getenv("XAUTHORITY");  // para X11
-                                              /*
-                                               *xdg0    = getenv("XDG_RUNTIME_DIR"),
-                                               *xdg1    = getenv("XDG_SEAT"),
-                                               *xdg2    = getenv("XDG_SESSION_CLASS"),
-                                               *xdg3    = getenv("XDG_SESSION_ID"),
-                                               *xdg4    = getenv("XDG_SESSION_TYPE"),
-                                               *xdg5    = getenv("XDG_VTNR"),
-                                               *manp    = getenv("MANPATH");
-                                               */
-
-      sprintf(env1, "TERM=%s", term);
-      sprintf(env2, "DISPLAY=%s", display);
-      sprintf(env3, "XAUTHORITY=%s", xauth);  // !!! > 32
-      char *argv[3], *envp[] = {env1, env2, env3, 0};
-      argv[0] = command1;
-      argv[1] = command2;
-      argv[2] = 0;
-      execve(command1, argv, envp);  // xdg-open archivo.txt
-      salir(EXIT_SUCCESS);
-    }
+	  // enviar command2
+	  // recibir bool si tenemos que recibir command2 ? recibir | no recibir
   }
   free(mascota);
 }
 
-void borrar() {
+void borrar(clientfd) {
   int r;
   ulong key, id;
   FILE* archivo;
   printf("Hay %ld numeros presentes.\nCual es la clave de la mascota?\n",
-         hash_table.numero_de_datos);
-  r = scanf("%ld", &key);
+         hash_table.numero_de_datos); // lo olvidamos
+  r = recv(clientfd, &key, sizeof(int), 0);
   ERROR(r == 0, perror("scanf"));
   id = hash(key);
   if (hash_table.id[id] == 0) {
-    return;
+	  r = send(clientfd, FALSE, 1, 0);
+	  return
   }
+  r = send(clientfd, TRUE, 1, 0);
+
+  sem_wait(accesoADatos);
+  
   archivo = fopen(ARCHIVO, "r+");
   ir_en_linea(archivo, id);
   hash_table.id[id] = 0;
@@ -405,17 +341,16 @@ void borrar() {
   r = fwrite(&key, sizeof(ulong), 1, archivo);
   ERROR(r == 0, perror("fwrite"); fclose(archivo));
   fclose(archivo);
+
+  sem_post(accesoADatos);
 }
 
-void buscar(struct termios termios_p_raw,
-            struct termios termios_p_def,
-            char buf[]) {
+void buscar(clientfd) {
   int r;
-  ulong i, j, k = 0, lineas;
+  ulong i, j;
   char buffer_u[SIZE_GRANDE], buffer_d[SIZE_GRANDE];
   FILE* archivo;
-  printf("Cual es el nombre de la mascota?\n");
-  r = scanf("%s", buffer_u);
+  r = recv(clientfd, buffer_u, SIZE_GRANDE * sizeof(char), 0);
   ERROR(r == 0, perror("scanf"));
   for (i = 0; i < SIZE_GRANDE; i++) {
     if (buffer_u[i] >= 'A' && buffer_u[i] <= 'Z') {
@@ -425,10 +360,6 @@ void buscar(struct termios termios_p_raw,
   archivo = fopen(ARCHIVO, "r");
   ERROR(archivo == NULL, perror("fopen"));
 
-  fflush(stdin);
-  tcsetattr(STDIN_FILENO, TCSANOW, &termios_p_raw);  // set term to raw
-  setbuf(stdin, NULL);
-  lineas = (window.ws_row - 1);  // leer las lineas del term
 
   for (i = 0; i < hash_table.size; i++) {
 	  if (hash_table.id[i] != 0) {
@@ -445,21 +376,11 @@ void buscar(struct termios termios_p_raw,
            j++) {
       }
       if (buffer_u[j] == '\0') {
+	      /* 2 posibilidades :
+	       * send cada clave/nombre, y al final send 0/0 para que el cliente sepa que es bueno
+	       * escribir todo en 1/2 archivo.s, y asi podemos saber cual es el tamano antes de send
+	       */
         printf("key : %ld - nombre : %s\n\r", hash_table.id[i], buffer_d);
-        k++;
-        if (k == lineas) {
-          printf("Continuar - cualquier tecla ; Salir - q");
-          r = getc(stdin);
-          printf("\n\r");
-          if (r == 'q') {
-            setbuf(stdin, buf);  // set buffer
-            tcsetattr(STDIN_FILENO, TCSANOW,
-                      &termios_p_def);  // set back term to default
-            fclose(archivo);
-            return;
-          }
-          k = 0;
-        }
       }
     }
   }

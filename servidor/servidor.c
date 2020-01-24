@@ -1,6 +1,8 @@
 #include "p1-dogProgram.h"
 #define NUMCLIENTES 32
 #define ACCESO 1
+#define LEN_FUNCTION_NAME 10 // insercion : 9 caracteres + \0
+#define LOGFILENAME "serverDogs.log"
 
 tabla hash_table;  // 76MB
 sprimos primos;    // 5MB
@@ -105,32 +107,46 @@ int main(int argc, char* argv[]) {
 }
 
 void *hilosfuncion(void *ap){
-	int clientfd = (int) ap[0], r, buffer;
-	ap[0] = 0;
-	string registroCadena[SIZE_GRANDE];
+	int clientfd = (int) ap[0], r, bufferInt;
+	struct sockaddr_in client = (struct sockaddr_in) ap[1];
+	FILE *logArchivo;
+	string log[numero], funcion[LEN_FUNCTION_NAME], registroCadena[SIZE_GRANDE];
 	time_t t = time(NULL);
-	truct tm tm = *localtime(&t);
+	struct tm tm = *localtime(&t); // habia 'truct tm', entonces no sé si al principio habia 'tm' o 'struct tm'
+	ap[0] = 0;
 	// printf("now: %d-%02d-%02d %02d:%02d:%02d\n" tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
-	string log[numero];
-	sprintf(log, "%04d%02d%02dT%02d%02d%02d", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
-	r = recv(clientfd, &buffer, 1, 0);
+	
+	r = recv(clientfd, &bufferInt, 1, 0);
 	//error
-	switch(buffer){
+	switch(bufferInt){
 	case 1:
-		ingresar(clientfd);
+		funcion = "inserción";
+		registroCadena = ingresar(clientfd);
 		break;
 	case 2:
-		ver(clientfd);
+		funcion = "lectura";
+		registroCadena = ver(clientfd);
 		break;
 	case 3:
-		borrar(clientfd);
+		funcion = "borrado";
+		registroCadena = borrar(clientfd);
 		break;
 	case 4:
-		buscar(clientfd);
+		funcion = "búsqueda";
+		registroCadena = buscar(clientfd);
 		break;
 	default:
 		ERROR(1, fprintf(stderr, "Cliente no envia el buen mensaje"));
 	}
+	sprintf(log, "%04d%02d%02dT%02d%02d%02d Cliente %ld %s %s\n", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec,
+	        client.sin_addr,
+	        funcion,
+	        registroCadena);
+	logArchivo = fopen(LOGFILENAME, "a");
+	r = fwrite(log, sizeof(log), 1, logArchivo);
+	//error
+	fclose(logArchivo);
+
 	close(clientfd);
 }
 
@@ -171,7 +187,7 @@ void servidor(){
 
 		//semaforo
 		clientes = sem_open("clientes", O_CREAT, 0700, NUMCLIENTES);
-		pthread_create(&tfd[i], NULL, hilosfuncion, &clientfd);
+		pthread_create(&tfd[i], NULL, hilosfuncion, &clientfd, &client);
 		i++;
 		if(i > NUMCLIENTES){
 			i = 0;
@@ -229,7 +245,11 @@ void ingresar(clientfd) {
 
   r = send(clientfd, key, sizeof(key), 0);
 
+  string keyString[len(key)+1];
+  sprintf(keyString, "%lu", key);
+
   free(new);
+  return keyString;
 }
 
 void ver(clientfd) {
@@ -326,6 +346,10 @@ void ver(clientfd) {
 	  // recibir bool si tenemos que recibir command2 ? recibir | no recibir
   }
   free(mascota);
+
+  string keyString[len(key)+1];
+  sprintf(keyString, "%lu", key);
+  return keyString;
 }
 
 void borrar(clientfd) {
@@ -355,6 +379,10 @@ void borrar(clientfd) {
   fclose(archivo);
 
   sem_post(accesoADatos);
+
+  string keyString[len(key)+1];
+  sprintf(keyString, "%lu", key);
+  return keyString;
 }
 
 void buscar(clientfd) {
@@ -399,6 +427,7 @@ void buscar(clientfd) {
   setbuf(stdin, buf);
   tcsetattr(STDIN_FILENO, TCSANOW, &termios_p_def);
   fclose(archivo);
+  return buffer_u;
 }
 
 // returns id ; hash_table[id] == key dice si existe

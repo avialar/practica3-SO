@@ -1,3 +1,4 @@
+# Para hacer el commit, el pull, el merge, el push
 USAGE="USAGE\n\t$0 \"mensaje de commit\""
 if [ $# != 1 ];
 then

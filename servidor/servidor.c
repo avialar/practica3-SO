@@ -1,8 +1,11 @@
 #include "p1-dogProgram.h"
+#include "servidor.h"
 #define NUMCLIENTES 32
 #define ACCESO 1
-#define LEN_FUNCTION_NAME 10 // insercion : 9 caracteres + \0
+#define LEN_FUNCTION_NAME 11 // insercion : 9 caracteres + \0 + unicode
 #define LOGFILENAME "serverDogs.log"
+#define PORT 3535
+#define BACKLOG 2
 
 tabla hash_table;  // 76MB
 sprimos primos;    // 5MB
@@ -15,10 +18,6 @@ int main(int argc, char* argv[]) {
   dogType buffer;
   ulong key = 0, s = 1, n;
   FILE* archivo;
-
-  setbuf(stdout, NULL);
-
-  ioctl(STDOUT_FILENO, TIOCGWINSZ, &window);
 
   archivo = fopen(PRIMOS, "r");
   ERROR(archivo == NULL,
@@ -107,39 +106,46 @@ int main(int argc, char* argv[]) {
 }
 
 void *hilosfuncion(void *ap){
-	int clientfd = (int) ap[0], r, bufferInt;
-	struct sockaddr_in client = (struct sockaddr_in) ap[1];
+	threadArg arg = *(threadArg*)ap;
+	int clientfd = *(arg.clientfd), r, bufferInt;
+	struct sockaddr_in client = *(arg.client);
 	FILE *logArchivo;
-	string log[numero], funcion[LEN_FUNCTION_NAME], registroCadena[SIZE_GRANDE];
+	/*
+	  15 + 1 + 7 + 1 + 15 + 1 + LEN_FUNCTION_NAME + 1 + SIZE_GRANDE
+	  = 41 + LEN_FUNCTION_NAME + SIZE_GRANDE
+192.168.255.254
+	 */
+	char log[41 + LEN_FUNCTION_NAME + SIZE_GRANDE], funcion[LEN_FUNCTION_NAME],
+		*registroCadena = (char*) malloc(SIZE_GRANDE * sizeof(char));
 	time_t t = time(NULL);
-	struct tm tm = *localtime(&t); // habia 'truct tm', entonces no sé si al principio habia 'tm' o 'struct tm'
-	ap[0] = 0;
+	struct tm tm = *localtime(&t);
+	arg.clientfd = 0;
 	// printf("now: %d-%02d-%02d %02d:%02d:%02d\n" tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
 	
-	r = recv(clientfd, &bufferInt, 1, 0);
+	r = recv(clientfd, &bufferInt, sizeof(int), 0);
 	//error
 	switch(bufferInt){
 	case 1:
-		funcion = "inserción";
-		registroCadena = ingresar(clientfd);
+		sprintf(funcion, "inserción");
+		ingresar(clientfd, registroCadena);
 		break;
 	case 2:
-		funcion = "lectura";
-		registroCadena = ver(clientfd);
+		sprintf(funcion, "lectura");
+	  ver(clientfd, registroCadena);
 		break;
 	case 3:
-		funcion = "borrado";
-		registroCadena = borrar(clientfd);
+		sprintf(funcion, "borrado");
+		borrar(clientfd, registroCadena);
 		break;
 	case 4:
-		funcion = "búsqueda";
-		registroCadena = buscar(clientfd);
+		sprintf(funcion, "búsqueda");
+		buscar(clientfd, registroCadena);
 		break;
 	default:
 		ERROR(1, fprintf(stderr, "Cliente no envia el buen mensaje"));
 	}
-	sprintf(log, "%04d%02d%02dT%02d%02d%02d Cliente %ld %s %s\n", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec,
-	        client.sin_addr,
+	sprintf(log, "%04d%02d%02dT%02d%02d%02d Cliente %u %s %s\n", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec,
+	        client.sin_addr.s_addr,
 	        funcion,
 	        registroCadena);
 	logArchivo = fopen(LOGFILENAME, "a");
@@ -148,13 +154,16 @@ void *hilosfuncion(void *ap){
 	fclose(logArchivo);
 
 	close(clientfd);
+	free(registroCadena);
+	return;
 }
 
 void servidor(){
 	int r, serverfd, clientfd, on=1, i;
 	struct sockaddr_in server, client;
 	socklen_t len;
-	pthread_t tfd[NUMHILOS];
+	pthread_t tfd[NUMCLIENTES];
+	threadArg arg;
 	// crear servidor
 	serverfd = socket(AF_INET, SOCK_STREAM, 0);
 	ERROR(serverfd == -1,
@@ -174,20 +183,21 @@ void servidor(){
 	r = bind(serverfd, (struct sockaddr*) &server, len);
 	ERROR(r == -1,
 	      perror("bind"););
+	r = listen(serverfd, BACKLOG);
+	ERROR(r == -1,
+	      perror("listen"));
 	// done
 	i = 0;
+	arg.clientfd = &clientfd;
+	arg.client = &client;
 	while (1) {
-		r = listen(serverfd, BACKLOG);
-		ERROR(r == -1,
-		      perror("listen"));
-		
 		clientfd = accept(serverfd, (struct sockaddr*) &client, &len);
 		ERROR(clientfd == -1,
 		      perror("accept"));
 
 		//semaforo
 		clientes = sem_open("clientes", O_CREAT, 0700, NUMCLIENTES);
-		pthread_create(&tfd[i], NULL, hilosfuncion, &clientfd, &client);
+		pthread_create(&tfd[i], NULL, hilosfuncion, &arg);
 		i++;
 		if(i > NUMCLIENTES){
 			i = 0;
@@ -208,11 +218,9 @@ void servidor(){
 	      perror("send"););
 	*/
 	close(serverfd);
-	return EXIT_SUCCESS;
-
 }
 
-void ingresar(clientfd) {
+void ingresar(int clientfd, char* registroCadena) {
   int r;
   dogType* new = (dogType*)malloc(sizeof(dogType));
   ulong key, id;
@@ -243,18 +251,17 @@ void ingresar(clientfd) {
 
   sem_post(accesoADatos);
 
-  r = send(clientfd, key, sizeof(key), 0);
+  r = send(clientfd, &key, sizeof(ulong), 0);
 
-  string keyString[len(key)+1];
-  sprintf(keyString, "%lu", key);
+  sprintf(registroCadena, "%lu", key);
 
   free(new);
-  return keyString;
 }
 
-void ver(clientfd) {
+void ver(int clientfd, char* registroCadena) {
   int r, buffersize;
   ulong key, id, key2;
+  bool test = true;
   dogType* mascota;
   FILE* archivo;
   pid_t pid;
@@ -271,16 +278,17 @@ void ver(clientfd) {
     Sexo : 7
   */
 
-  printf("Hay %ld numeros presentes.\nCual es la clave de la mascota?\n",
-         hash_table.numero_de_datos); //eso lo olvidamos
+  r = send(clientfd, &hash_table.numero_de_datos, sizeof(long), 0);
+  //error
   r = recv(clientfd, &key, sizeof(int), 0);
   ERROR(r == 0, perror("scanf"));
   id = hash(key);
   if (hash_table.id[id] != key) {
-	  r = send(clientfd, FALSE, 1, 0);
+	  test = false;
+	  r = send(clientfd, &test, sizeof(bool), 0);
     return;
   }
-  r = send(clientfd, TRUE, 1, 0);
+  r = send(clientfd, &test, sizeof(bool), 0);
 
   sem_wait(accesoADatos);
   
@@ -289,10 +297,8 @@ void ver(clientfd) {
   ir_en_linea(archivo, id);
   r = fread(&key2, sizeof(ulong), 1, archivo);
   ERROR(r == 0, perror("fread"); free(mascota); fclose(archivo));
-  if (key != key2) {
-    printf("/!\\ key (%ld) != key2 (%ld)\n", key, key2);
-    return;
-  }
+  ERROR(key != key2, perror("ver -> key != key2");
+        free(mascota); fclose(archivo));
   r = fread(mascota, sizeof(dogType), 1, archivo);
   ERROR(r == 0, perror("fread"); free(mascota); fclose(archivo));
   fclose(archivo);
@@ -347,25 +353,26 @@ void ver(clientfd) {
   }
   free(mascota);
 
-  string keyString[len(key)+1];
-  sprintf(keyString, "%lu", key);
-  return keyString;
+  sprintf(registroCadena, "%lu", key);
 }
 
-void borrar(clientfd) {
+void borrar(int clientfd, char* registroCadena) {
   int r;
   ulong key, id;
   FILE* archivo;
-  printf("Hay %ld numeros presentes.\nCual es la clave de la mascota?\n",
-         hash_table.numero_de_datos); // lo olvidamos
+  bool test = true;
+
+  r = send(clientfd, &hash_table.numero_de_datos, sizeof(long), 0);
+  //error
   r = recv(clientfd, &key, sizeof(int), 0);
   ERROR(r == 0, perror("scanf"));
   id = hash(key);
   if (hash_table.id[id] == 0) {
-	  r = send(clientfd, FALSE, 1, 0);
-	  return
+	  test = false;
+	  r = send(clientfd, &test, sizeof(bool), 0);
+	  return;
   }
-  r = send(clientfd, TRUE, 1, 0);
+  r = send(clientfd, &test, sizeof(bool), 0);
 
   sem_wait(accesoADatos);
   
@@ -380,18 +387,18 @@ void borrar(clientfd) {
 
   sem_post(accesoADatos);
 
-  string keyString[len(key)+1];
-  sprintf(keyString, "%lu", key);
-  return keyString;
+  sprintf(registroCadena, "%lu", key);
 }
 
-void buscar(clientfd) {
+void buscar(int clientfd, char* registroCadena) {
   int r;
   ulong i, j;
   char buffer_u[SIZE_GRANDE], buffer_d[SIZE_GRANDE];
   FILE* archivo;
+  bool test;
   r = recv(clientfd, buffer_u, SIZE_GRANDE * sizeof(char), 0);
   ERROR(r == 0, perror("scanf"));
+  sprintf(registroCadena, "%s", buffer_u);
   for (i = 0; i < SIZE_GRANDE; i++) {
     if (buffer_u[i] >= 'A' && buffer_u[i] <= 'Z') {
       buffer_u[i] += 32;
@@ -417,17 +424,25 @@ void buscar(clientfd) {
       }
       if (buffer_u[j] == '\0') {
 	      /* 2 posibilidades :
-	       * send cada clave/nombre, y al final send 0/0 para que el cliente sepa que es bueno
+	       * send cada clave/nombre, y al final send 0/0 para que el cliente sepa que es bueno < hacemos esto porque ocupa menos memoria
 	       * escribir todo en 1/2 archivo.s, y asi podemos saber cual es el tamano antes de send
 	       */
-        printf("key : %ld - nombre : %s\n\r", hash_table.id[i], buffer_d);
+	      r = send(clientfd, &hash_table.id[i], sizeof(ulong), 0);
+	      //error
+	      r = send(clientfd, buffer_d, sizeof(char) * SIZE_GRANDE, 0);
+	      //error
+	      r = recv(clientfd, &test, sizeof(bool), 0);
+	      //error
+	      if(test) {
+		      fclose(archivo);
+		      return;
+	      }
       }
     }
   }
-  setbuf(stdin, buf);
-  tcsetattr(STDIN_FILENO, TCSANOW, &termios_p_def);
+  i = 0;
+  r = send(clientfd, &i, sizeof(ulong), 0);
   fclose(archivo);
-  return buffer_u;
 }
 
 // returns id ; hash_table[id] == key dice si existe
@@ -501,4 +516,10 @@ void sizemasmas() {
     hash_table.id[i] = tmp.id[i];
   }
   free(tmp.id);
+}
+
+void salir(int exitcode) {
+  free(hash_table.id);
+  free(primos.primos);
+  exit(exitcode);
 }

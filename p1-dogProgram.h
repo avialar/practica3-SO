@@ -4,17 +4,24 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>  // para mkdir
 #include <sys/types.h>
+#include <sys/socket.h>
 #include <sys/wait.h>
 #include <termios.h>  // para cualquier tecla
 #include <unistd.h>
 #include <time.h>
+#include <math.h>
+#include <stdbool.h>
+#include <arpa/inet.h>
+#include <semaphore.h>
+#include <fcntl.h>
+#include <pthread.h>
 
 #define ARCHIVO "dataDogs.dat"
 #define PRIMOS "primos.dat"
 #define SIZE_LINEA 1024
 #define SIZE_GRANDE 32
 #define SIZE_PEQUENO 16
-#define TEXT_EDITOR "/usr/bin/nedit"
+#define TEXT_EDITOR "$EDITOR"
 #define FIRST_SIZE 11
 #define ERROR(test, funcion) \
   if (test) {                \
@@ -62,15 +69,5 @@ typedef struct primos_s {
   ulong size;
 } sprimos;
 
-void menu();
-void ingresar();
-void ver();
-void borrar();
-void buscar(struct termios termios_p_raw,
-            struct termios termios_p_def,
-            char buf[]);
-void salir(int exitcode);
-ulong hash(ulong key);  // In : key ; Out : id
-ulong new_hash();       // Out : key
-void ir_en_linea(FILE* archivo, ulong linea);
-void sizemasmas();
+
+

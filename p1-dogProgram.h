@@ -23,11 +23,18 @@
 #define SIZE_PEQUENO 16
 #define TEXT_EDITOR "$EDITOR"
 #define FIRST_SIZE 11
+#define PORT 3535
+#define BACKLOG 2
+
+
 #define ERROR(test, funcion) \
   if (test) {                \
     funcion;                 \
     salir(EXIT_FAILURE);     \
   }
+
+#define DEBUG(a, ...) printf(a, ##__VA_ARGS__); printf("\n");
+
 #define PROGRESSION(a, b, c, d)            \
   if (a % (b / d) == 0) {                  \
     double tmp = (a * 1.0) / b;            \
@@ -69,5 +76,5 @@ typedef struct primos_s {
   ulong size;
 } sprimos;
 
-
+void salir(int exitcode);
 

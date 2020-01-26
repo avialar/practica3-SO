@@ -6,4 +6,4 @@ void buscar(int clientfd,
             struct termios termios_p_raw,
             struct termios termios_p_def,
             char buf[]);
-void salir(int exitcode);
+

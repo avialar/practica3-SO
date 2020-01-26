@@ -1,7 +1,6 @@
 #include "p1-dogProgram.h"
 #include "cliente.h"
 struct winsize window;
-#define PORT 3535
 
 int main(){
 	menu();
@@ -24,16 +23,15 @@ void menu() {
   struct sockaddr_in client;
   socklen_t len;
   
-  clientfd = socket(AF_INET, SOCK_STREAM, 0);
-  //validar, clientfd == -1
-  
   client.sin_family = AF_INET;
   client.sin_port = htons(PORT);
   client.sin_addr.s_addr = inet_addr("127.0.0.1");
-  bzero(client.sin_zero, 0);
+  bzero(client.sin_zero, 8);
   len = sizeof(struct sockaddr_in);
 
   while (1) {
+	  clientfd = socket(AF_INET, SOCK_STREAM, 0);
+	  //validar, clientfd == -1
     p = 0;
     printf(
         "1. Ingresar registro\n2. Ver registro\n3. Borrar registro\n4. "
@@ -43,13 +41,16 @@ void menu() {
       // p = '5';
     }
 
-    if (p < 5 && p > 0){
+    if (p > '0' && p < '5') {
 	    r = connect(clientfd, (struct sockaddr_in*) &client, len);
 	    //error
-	    r = send(clientfd, &p, sizeof(int), 0);
+	    ERROR(r == -1, perror("connect"););
+	    printf("p = %c, r = %d, clientfd = %d\n", p, r, clientfd);
+	    r = send(clientfd, &p, sizeof(char), 0);
 	    //error?
+	    ERROR(r == -1, perror("send"););
     }
-    
+	    
     switch (p) {  // check si p es 1, 2, 3, 4 o 5
       case '1':
         ingresar(clientfd);
@@ -143,7 +144,7 @@ void ver(int clientfd) {
          i);
   r = scanf("%ld", &key);
   ERROR(r == 0, perror("scanf"));
-  r = send(clientfd, &key, sizeof(int), 0);
+  r = send(clientfd, &key, sizeof(ulong), 0);
   //error
   r = recv(clientfd, &test, sizeof(bool), 0);
   //error

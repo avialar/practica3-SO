@@ -1,11 +1,5 @@
 #include "p1-dogProgram.h"
 #include "servidor.h"
-#define NUMCLIENTES 32
-#define ACCESO 1
-#define LEN_FUNCTION_NAME 11 // insercion : 9 caracteres + \0 + unicode
-#define LOGFILENAME "serverDogs.log"
-#define PORT 3535
-#define BACKLOG 2
 
 tabla hash_table;  // 76MB
 sprimos primos;    // 5MB
@@ -16,9 +10,9 @@ int main(int argc, char* argv[]) {
   int r;
   uint i;
   dogType buffer;
-  ulong key = 0, s = 1, n;
+  ulong key = 0, s = 1, n, loops;
+  char* endptr;
   FILE* archivo;
-
   archivo = fopen(PRIMOS, "r");
   ERROR(archivo == NULL,
         fprintf(stderr, "Error : No se puede leer %s\n", PRIMOS))
@@ -106,9 +100,20 @@ int main(int argc, char* argv[]) {
 }
 
 void *hilosfuncion(void *ap){
+	DEBUG("hilosfuncion()");
 	threadArg arg = *(threadArg*)ap;
-	int clientfd = *(arg.clientfd), r, bufferInt;
+	int clientfd = *(arg.clientfd), r;
+	char p;
 	struct sockaddr_in client = *(arg.client);
+	((threadArg*)ap)->listo = true;
+	/*
+	char clntName[INET_ADDRSTRLEN];
+	r = inet_ntop(AF_INET,client.sin_addr.s_addr,clntName,sizeof(clntName));
+	ERROR(r == NULL, perror("hilosfuncion -> inet_ntop"));
+  DEBUG("hilosfuncion -> inet_ntop funciona");
+	*/
+
+	char *ip = inet_ntoa(client.sin_addr);
 	FILE *logArchivo;
 	/*
 	  15 + 1 + 7 + 1 + 15 + 1 + LEN_FUNCTION_NAME + 1 + SIZE_GRANDE
@@ -119,33 +124,38 @@ void *hilosfuncion(void *ap){
 		*registroCadena = (char*) malloc(SIZE_GRANDE * sizeof(char));
 	time_t t = time(NULL);
 	struct tm tm = *localtime(&t);
-	arg.clientfd = 0;
 	// printf("now: %d-%02d-%02d %02d:%02d:%02d\n" tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
 	
-	r = recv(clientfd, &bufferInt, sizeof(int), 0);
+	r = recv(clientfd, &p, sizeof(char), 0);
 	//error
-	switch(bufferInt){
-	case 1:
+	switch(p){
+	case '1':
+		DEBUG("inserción");
 		sprintf(funcion, "inserción");
 		ingresar(clientfd, registroCadena);
 		break;
-	case 2:
+	case '2':
+		DEBUG("lectura");
 		sprintf(funcion, "lectura");
 	  ver(clientfd, registroCadena);
 		break;
-	case 3:
+	case '3':
+		DEBUG("borrado");
 		sprintf(funcion, "borrado");
 		borrar(clientfd, registroCadena);
 		break;
-	case 4:
+	case '4':
+		DEBUG("búsqueda");
 		sprintf(funcion, "búsqueda");
 		buscar(clientfd, registroCadena);
 		break;
 	default:
-		ERROR(1, fprintf(stderr, "Cliente no envia el buen mensaje"));
+		ERROR(1, fprintf(stderr, "Cliente no envia el buen mensaje\n"));
 	}
-	sprintf(log, "%04d%02d%02dT%02d%02d%02d Cliente %u %s %s\n", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec,
-	        client.sin_addr.s_addr,
+	DEBUG("de nuevo en hilosfuncion()");
+	sprintf(log, "%04d%02d%02dT%02d%02d%02d Cliente %s %s %s\n", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec,
+	        //clntName,'/',ntohs(client.sin_port),
+	        ip,
 	        funcion,
 	        registroCadena);
 	logArchivo = fopen(LOGFILENAME, "a");
@@ -155,14 +165,17 @@ void *hilosfuncion(void *ap){
 
 	close(clientfd);
 	free(registroCadena);
+	DEBUG("hilosfuncion -> return");
+	sem_post(clientes);
 	return;
 }
 
 void servidor(){
+	DEBUG("servidor()");
 	int r, serverfd, clientfd, on=1, i;
 	struct sockaddr_in server, client;
 	socklen_t len;
-	pthread_t tfd[NUMCLIENTES];
+	pthread_t *tfd = (pthread_t*) calloc(NUMCLIENTES, sizeof(pthread_t));
 	threadArg arg;
 	// crear servidor
 	serverfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -172,7 +185,7 @@ void servidor(){
 	
 	server.sin_family = AF_INET;
 	server.sin_port = htons(PORT); // big endian / little endian
-	server.sin_addr.s_addr = INADDR_ANY;
+	server.sin_addr.s_addr = inet_addr("127.0.0.1"); //INADDR_ANY;
 	bzero((server.sin_zero), 8);
 	len = sizeof(struct sockaddr_in);
 
@@ -190,23 +203,41 @@ void servidor(){
 	i = 0;
 	arg.clientfd = &clientfd;
 	arg.client = &client;
+	r = sem_unlink("clientes");
+	r = sem_unlink("acceso a datos");
+	clientes = sem_open("clientes", O_CREAT, 0700, NUMCLIENTES);
+	accesoADatos = sem_open("acceso a datos", O_CREAT, 0700, ACCESO);
+	//semaforo
+	
 	while (1) {
+		DEBUG("servidor -> while");
+		arg.listo=false;
+		DEBUG("servidor -> while -> semaforo a %d/%d", *(int*)clientes, NUMCLIENTES);
+		sem_wait(clientes);
 		clientfd = accept(serverfd, (struct sockaddr*) &client, &len);
+		DEBUG("servidor -> while clientfd accept!");
 		ERROR(clientfd == -1,
 		      perror("accept"));
 
-		//semaforo
-		clientes = sem_open("clientes", O_CREAT, 0700, NUMCLIENTES);
+		
 		pthread_create(&tfd[i], NULL, hilosfuncion, &arg);
+		DEBUG("servidor -> while -> pthread_create : done");
 		i++;
 		if(i > NUMCLIENTES){
 			i = 0;
 		}
-		while(clientfd != 0){
-			sleep(1);
+		while(!arg.listo){
+			sleep(0.0001);
 		}
 		
 	}
+	for (uint i = 0; i < NUMCLIENTES; i++){
+		if(tfd [i] != 0){
+			pthread_join(tfd[i], NULL);
+		}
+	}
+	free(tfd);
+	
 	/*
 	if(argc > 1){
 		r = send(clientfd, argv[1], sizeof(argv[1]), 0);
@@ -221,29 +252,32 @@ void servidor(){
 }
 
 void ingresar(int clientfd, char* registroCadena) {
+	DEBUG("ingresar()");
   int r;
   dogType* new = (dogType*)malloc(sizeof(dogType));
   ulong key, id;
   FILE* archivo;
 
   r = recv(clientfd, new, sizeof(dogType), 0);
-
+  //error
+  ERROR(r == -1, perror("ingresar -> recv dogtype"))
+  DEBUG("recv -> r = %d", r);
   sem_wait(accesoADatos);
+  DEBUG("sem_wait");
   
   key = new_hash(new->nombre);
   id = hash(key);
-  if (hash_table.id[id] == key) {
-	  // bueno
-  } else {
-    ERROR(1, fprintf(stderr, "Error in new_hash\n"); free(new));
-  }
+  ERROR(hash_table.id[id] != key, fprintf(stderr, "Error in new_hash\n"); free(new));
+  DEBUG("key=%lu, id=%lu", key, id);
 
   /*
     Escribir en un archivo
    */
   archivo = fopen(ARCHIVO, "r+");
   ERROR(archivo == 0, perror("fopen"); free(new));
+  DEBUG("tenemos el archivo\n");
   ir_en_linea(archivo, id);
+  DEBUG("estamos en la linea %lu", id);
   r = fwrite(&key, sizeof(ulong), 1, archivo);
   ERROR(r == 0, perror("fwrite"); free(new); fclose(archivo));
   fwrite(new, sizeof(dogType), 1, archivo);
@@ -280,12 +314,14 @@ void ver(int clientfd, char* registroCadena) {
 
   r = send(clientfd, &hash_table.numero_de_datos, sizeof(long), 0);
   //error
-  r = recv(clientfd, &key, sizeof(int), 0);
-  ERROR(r == 0, perror("scanf"));
+  r = recv(clientfd, &key, sizeof(ulong), 0);
+  ERROR(r == -1, perror("ver -> recv"));
+  sprintf(registroCadena, "%lu", key);
   id = hash(key);
   if (hash_table.id[id] != key) {
 	  test = false;
 	  r = send(clientfd, &test, sizeof(bool), 0);
+	  DEBUG("hash_table.id[%lu] = %lu != %lu = key\nr=%d", id, hash_table.id[id], key, r);
     return;
   }
   r = send(clientfd, &test, sizeof(bool), 0);
@@ -296,11 +332,11 @@ void ver(int clientfd, char* registroCadena) {
   archivo = fopen(ARCHIVO, "r");
   ir_en_linea(archivo, id);
   r = fread(&key2, sizeof(ulong), 1, archivo);
-  ERROR(r == 0, perror("fread"); free(mascota); fclose(archivo));
+  ERROR(r == 0, perror("ver -> fread"); free(mascota); fclose(archivo));
   ERROR(key != key2, perror("ver -> key != key2");
         free(mascota); fclose(archivo));
   r = fread(mascota, sizeof(dogType), 1, archivo);
-  ERROR(r == 0, perror("fread"); free(mascota); fclose(archivo));
+  ERROR(r == 0, perror("ver -> fread"); free(mascota); fclose(archivo));
   fclose(archivo);
 
   sem_post(accesoADatos);
@@ -314,7 +350,7 @@ void ver(int clientfd, char* registroCadena) {
   // existe la historia clinica?
 
   r = sprintf(command2, "historias_clinicas/%lu_hc.txt", key);  // 19 + 20 + 7
-  ERROR(r < 0, perror("sprintf"); free(mascota));
+  ERROR(r < 0, perror("ver -> sprintf"); free(mascota));
 
   archivo = fopen(command2, "r");
 
@@ -323,7 +359,7 @@ void ver(int clientfd, char* registroCadena) {
     archivo = fopen(command2, "w");
     if (archivo == NULL) {
       r = mkdir("historias_clinicas", 0755);
-      ERROR(r == -1, perror("mkdir"));
+      ERROR(r == -1, perror("ver -> mkdir"));
       archivo = fopen(command2, "w");
     }
     char malo[] = "malo", femenino[] = "femenino", otro[] = "otro", *sexo;
@@ -352,8 +388,6 @@ void ver(int clientfd, char* registroCadena) {
 	  // recibir bool si tenemos que recibir command2 ? recibir | no recibir
   }
   free(mascota);
-
-  sprintf(registroCadena, "%lu", key);
 }
 
 void borrar(int clientfd, char* registroCadena) {

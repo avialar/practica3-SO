@@ -120,14 +120,15 @@ void ingresar(int clientfd) {
 
 void ver(int clientfd) {
 	bool test;
-	int r, buffersize;
+	int r;
+	struct stat statBefore, statAfter;
 	long i;
-  ulong key, id, key2;
+  ulong key;
   dogType* mascota;
   FILE* archivo;
   pid_t pid;
-  char l, command1[] = TEXT_EDITOR, command2[46] = "",
-          buffer[211] = "";  // 32 + 32 + 20 + 16 + (20 + 13 = 33) + 8
+  char l, command[] = TEXT_EDITOR" .tmp.txt", filename[] = ".tmp.txt", // linux -> .* = archivo oculto
+	  bufferArchivo[STRING_BUFFER], *s;  // 32 + 32 + 20 + 16 + (20 + 13 = 33) + 8
                              // (malo/femenino) + (22 + 5*7 = 22 + 35 = 57)
   /*
     Nombre : 10
@@ -170,66 +171,46 @@ void ver(int clientfd) {
   }
   send(clientfd, &l, sizeof(char), 0);
   if (l == 'S' || l == 's') {  // abrir historia clinica
-	  free(mascota);return; // tenemos que hacerlo
-    pid = fork();
-    ERROR(pid == -1, perror("can't fork"));
-    if (pid == 0) {  // hijo
-      char env1[32], env2[32], env3[64];
+	  //pid = fork();
+	  //ERROR(pid == -1, perror("can't fork"));
+	  //if (pid == 0) {  // hijo
+	  //recibir command2
+	  archivo = fopen(filename, "w");
+	  for(r = recv(clientfd, bufferArchivo, STRING_BUFFER * sizeof(char), 0); bufferArchivo[0] != '\0'; r = recv(clientfd, bufferArchivo, STRING_BUFFER * sizeof(char), 0)) {
+		  //error
+		  r = fputs(bufferArchivo, archivo);
+		  //error
+		  DEBUG("ver -> recv -> loop -> r=%d, buffer=\"%s\" (buffer[0] = '%c' = %d)", r, bufferArchivo, bufferArchivo[0], bufferArchivo[0]);
+	  }
+	  DEBUG("ver -> recv -> out of loop -> r=%d, buffer=\"%s\"", r, bufferArchivo);
+	  fclose(archivo);
+	  r = stat(filename, &statBefore);
+	  //error
+	  DEBUG("ver -> antes de system");
+	  system(command);
+	  DEBUG("ver -> despues de system");
 
-      char
-          /*
-           *caml    = getenv("CAML_LD_LIBRARY_PATH"),
-           *dbus    = getenv("DBUS_SESSION_BUS_ADDRESS"),
-           */
-          *display = getenv("DISPLAY"),  // para X11
-          /*
-           *editor  = getenv("EDITOR"),
-           *home    = getenv("HOME"),
-           *invocid = getenv("INVOCATION_ID"),
-           *journ   = getenv("JOURNAL_STREAM"),
-           *lang    = getenv("LANG"),
-           *less    = getenv("LESSOPEN"),
-           *logn    = getenv("LOGNAME"),
-           *mail    = getenv("MAIL"),
-           *moz     = getenv("MOZ_PLUGIN_PATH"),
-           *ocaml   = getenv("OCAML_TOPLEVEL_PATH"),
-           *oldpwd  = getenv("OLDPWD"),
-           *opam    = getenv("OPAM_SWITCH_PREFIX "),
-           *path    = getenv("PATH"),
-           *prompt  = getenv("PROMPT"),
-           *pwd     = getenv("PWD"), // para abrir
-           *shell   = getenv("SHELL"),
-           *shlvl   = getenv("SHLVL"),
-           */
-          *term = getenv("TERM"),             // para consola
-                                              /*
-                                               *tmux0   = getenv("TMUX"),
-                                               *tmux1   = getenv("TMUX_PANE"),
-                                               *user    = getenv("USER"),
-                                               *winid   = getenv("WINDOWID"),
-                                               */
-              *xauth = getenv("XAUTHORITY");  // para X11
-                                              /*
-                                               *xdg0    = getenv("XDG_RUNTIME_DIR"),
-                                               *xdg1    = getenv("XDG_SEAT"),
-                                               *xdg2    = getenv("XDG_SESSION_CLASS"),
-                                               *xdg3    = getenv("XDG_SESSION_ID"),
-                                               *xdg4    = getenv("XDG_SESSION_TYPE"),
-                                               *xdg5    = getenv("XDG_VTNR"),
-                                               *manp    = getenv("MANPATH");
-                                               */
-
-      sprintf(env1, "TERM=%s", term);
-      sprintf(env2, "DISPLAY=%s", display);
-      sprintf(env3, "XAUTHORITY=%s", xauth);  // !!! > 32
-      char *argv[3], *envp[] = {env1, env2, env3, 0};
-      argv[0] = command1;
-      argv[1] = command2;
-      argv[2] = 0;
-      execve(command1, argv, envp);  // xdg-open archivo.txt
-      salir(EXIT_SUCCESS);
-    }
+	  r = stat(filename, &statAfter);
+	  test = !(statBefore.st_mtim.tv_sec == statAfter.st_mtim.tv_sec);
+	  DEBUG("ver -> test=%d (%d == %d)", test, statBefore.st_mtim.tv_sec, statAfter.st_mtim.tv_sec);
+	  //enviar bool si tenemos que enviar command2?
+	  r = send(clientfd, &test, sizeof(bool), 0);
+	  if (test) {
+		  archivo = fopen(filename, "r");
+		  for(s = fgets(bufferArchivo, STRING_BUFFER, archivo); bufferArchivo[0] != EOF && s != NULL ; s = fgets(bufferArchivo, STRING_BUFFER, archivo)) {
+			  ERROR(s == NULL, perror("ver -> fgets"););
+			  r = send(clientfd, bufferArchivo, STRING_BUFFER * sizeof(char), 0);
+		  }
+		  sprintf(bufferArchivo, "");
+		  r = send(clientfd, bufferArchivo, STRING_BUFFER * sizeof(char), 0); // EOF
+		  fclose(archivo);
+	  }
+	  r = remove(filename);
+	  //error
+	  
+	  //salir(EXIT_SUCCESS);
   }
+  //}
   free(mascota);
 }
 
@@ -260,9 +241,8 @@ void buscar(int clientfd, struct termios termios_p_raw,
             struct termios termios_p_def,
             char buf[]) {
   int r;
-  ulong i, j, k = 0, lineas, key;
+  ulong k = 0, lineas, key;
   char buffer_u[SIZE_GRANDE];
-  FILE* archivo;
   bool test = true;
   printf("Cual es el nombre de la mascota?\n");
   r = scanf("%s", buffer_u);
@@ -294,7 +274,6 @@ void buscar(int clientfd, struct termios termios_p_raw,
 				  setbuf(stdin, buf);  // set buffer
 				  tcsetattr(STDIN_FILENO, TCSANOW,
 				            &termios_p_def);  // set back term to default
-				  fclose(archivo);
 				  return;
 			  }
 			  k = 0;
@@ -303,5 +282,4 @@ void buscar(int clientfd, struct termios termios_p_raw,
   }
   setbuf(stdin, buf);
   tcsetattr(STDIN_FILENO, TCSANOW, &termios_p_def);
-  fclose(archivo);
 }

@@ -25,6 +25,8 @@
 #define FIRST_SIZE 11
 #define PORT 3535
 #define BACKLOG 2
+#define STRING_BUFFER 1024
+//#define EOF '\0'
 
 
 #define ERROR(test, funcion) \

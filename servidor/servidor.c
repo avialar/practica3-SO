@@ -10,8 +10,7 @@ int main(int argc, char* argv[]) {
   int r;
   uint i;
   dogType buffer;
-  ulong key = 0, s = 1, n, loops;
-  char* endptr;
+  ulong key = 0, s = 1, n;
   FILE* archivo;
   archivo = fopen(PRIMOS, "r");
   ERROR(archivo == NULL,
@@ -127,7 +126,7 @@ void *hilosfuncion(void *ap){
 	// printf("now: %d-%02d-%02d %02d:%02d:%02d\n" tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
 	
 	r = recv(clientfd, &p, sizeof(char), 0);
-	//error
+	ERROR(r == -1, perror("hilo -> recv"););
 	switch(p){
 	case '1':
 		DEBUG("inserción");
@@ -167,7 +166,7 @@ void *hilosfuncion(void *ap){
 	free(registroCadena);
 	DEBUG("hilosfuncion -> return");
 	sem_post(clientes);
-	return;
+	return EXIT_SUCCESS;
 }
 
 void servidor(){
@@ -298,9 +297,8 @@ void ver(int clientfd, char* registroCadena) {
   bool test = true;
   dogType* mascota;
   FILE* archivo;
-  pid_t pid;
-  char l, command1[] = TEXT_EDITOR, command2[46] = "",
-          buffer[211] = "";  // 32 + 32 + 20 + 16 + (20 + 13 = 33) + 8
+  char l, command2[46] = "",
+	  buffer[211] = "", bufferArchivo[STRING_BUFFER], *s;  // 32 + 32 + 20 + 16 + (20 + 13 = 33) + 8
                              // (malo/femenino) + (22 + 5*7 = 22 + 35 = 57)
   /*
     Nombre : 10
@@ -385,7 +383,29 @@ void ver(int clientfd, char* registroCadena) {
 
   if (l == 'S' || l == 's') {  // abrir historia clinica
 	  // enviar command2
+	  archivo = fopen(command2, "r");
+	  for(s = fgets(bufferArchivo, STRING_BUFFER, archivo); bufferArchivo[0] != EOF, s != NULL ; s = fgets(bufferArchivo, STRING_BUFFER, archivo)) {
+		  //ERROR(s == NULL, perror("ver -> fgets"););
+		  DEBUG("ver -> send -> s=%d, buffer=\"%s\"", s, bufferArchivo);
+		  r = send(clientfd, bufferArchivo, STRING_BUFFER * sizeof(char), 0);
+	  }
+	  DEBUG("ver -> send -> out of loop -> s=%d, buffer=\"%s\"", s, bufferArchivo);
+	  sprintf(bufferArchivo, "");
+	  r = send(clientfd, bufferArchivo, STRING_BUFFER * sizeof(char), 0); // EOF
+	  fclose(archivo);
 	  // recibir bool si tenemos que recibir command2 ? recibir | no recibir
+	  r = recv(clientfd, &test, sizeof(bool), 0);
+	  if (test) {
+		  archivo = fopen(command2, "w");
+		  for(r = recv(clientfd, bufferArchivo, STRING_BUFFER * sizeof(char), 0); bufferArchivo[0] != '\0'; r = recv(clientfd, bufferArchivo, STRING_BUFFER * sizeof(char), 0)) {
+			  //error
+			  r = fputs(bufferArchivo, archivo);
+			  //error
+			  DEBUG("ver -> recv -> buffer=\"%s\"", bufferArchivo);
+		  }
+		  fclose(archivo);
+		  
+	  }
   }
   free(mascota);
 }

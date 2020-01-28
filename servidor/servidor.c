@@ -361,9 +361,9 @@ void ver(int clientfd, char* registroCadena) {
       archivo = fopen(command2, "w");
     }
     char malo[] = "malo", femenino[] = "femenino", otro[] = "otro", *sexo;
-    if (mascota->sexo == 'm') {
+    if (mascota->sexo == 'm' || mascota->sexo == 'M') {
       sexo = malo;
-    } else if (mascota->sexo == 'f') {
+    } else if (mascota->sexo == 'f' || mascota->sexo == 'F') {
       sexo = femenino;
     } else {
       sexo = otro;
@@ -384,7 +384,7 @@ void ver(int clientfd, char* registroCadena) {
   if (l == 'S' || l == 's') {  // abrir historia clinica
 	  // enviar command2
 	  archivo = fopen(command2, "r");
-	  for(s = fgets(bufferArchivo, STRING_BUFFER, archivo); bufferArchivo[0] != EOF, s != NULL ; s = fgets(bufferArchivo, STRING_BUFFER, archivo)) {
+	  for(s = fgets(bufferArchivo, STRING_BUFFER, archivo); bufferArchivo[0] != EOF && s != NULL ; s = fgets(bufferArchivo, STRING_BUFFER, archivo)) {
 		  //ERROR(s == NULL, perror("ver -> fgets"););
 		  DEBUG("ver -> send -> s=%d, buffer=\"%s\"", s, bufferArchivo);
 		  r = send(clientfd, bufferArchivo, STRING_BUFFER * sizeof(char), 0);
@@ -415,10 +415,11 @@ void borrar(int clientfd, char* registroCadena) {
   ulong key, id;
   FILE* archivo;
   bool test = true;
+  char filename[46];
 
   r = send(clientfd, &hash_table.numero_de_datos, sizeof(long), 0);
   //error
-  r = recv(clientfd, &key, sizeof(int), 0);
+  r = recv(clientfd, &key, sizeof(ulong), 0);
   ERROR(r == 0, perror("scanf"));
   id = hash(key);
   if (hash_table.id[id] == 0) {
@@ -427,8 +428,10 @@ void borrar(int clientfd, char* registroCadena) {
 	  return;
   }
   r = send(clientfd, &test, sizeof(bool), 0);
-
+ 
   sem_wait(accesoADatos);
+  r = sprintf(filename, "historias_clinicas/%lu_hc.txt", key);  // 19 + 20 + 7
+  r = remove(filename);
   
   archivo = fopen(ARCHIVO, "r+");
   ir_en_linea(archivo, id);
@@ -438,6 +441,7 @@ void borrar(int clientfd, char* registroCadena) {
   r = fwrite(&key, sizeof(ulong), 1, archivo);
   ERROR(r == 0, perror("fwrite"); fclose(archivo));
   fclose(archivo);
+  
 
   sem_post(accesoADatos);
 
@@ -450,28 +454,34 @@ void buscar(int clientfd, char* registroCadena) {
   char buffer_u[SIZE_GRANDE], buffer_d[SIZE_GRANDE];
   FILE* archivo;
   bool test;
+  dogType* mascota;
   r = recv(clientfd, buffer_u, SIZE_GRANDE * sizeof(char), 0);
   ERROR(r == 0, perror("scanf"));
+  //DEBUG("buscar -> buffer_u = \"%s\"", buffer_u);
   sprintf(registroCadena, "%s", buffer_u);
   for (i = 0; i < SIZE_GRANDE; i++) {
     if (buffer_u[i] >= 'A' && buffer_u[i] <= 'Z') {
       buffer_u[i] += 32;
     }
   }
+  //DEBUG("buscar -> new buffer_u = \"%s\"", buffer_u);
   archivo = fopen(ARCHIVO, "r");
   ERROR(archivo == NULL, perror("fopen"));
 
-
+  mascota = (dogType*)malloc(sizeof(dogType));
   for (i = 0; i < hash_table.size; i++) {
+	  //DEBUG("buscar -> loop -> i=%d, hash_table.size=%d, id=%d", i, hash_table.size, hash_table.id[i]);
 	  if (hash_table.id[i] != 0) {
       fseek(archivo, sizeof(ulong), SEEK_CUR);
       r = fread(buffer_d, sizeof(char), SIZE_GRANDE, archivo);
+      //DEBUG("buscar -> buffer_d = \"%s\"", buffer_d);
       fseek(archivo, sizeof(dogType) - 32 * sizeof(char), SEEK_CUR);
       for (j = 0; j < SIZE_GRANDE; j++) {
         if (buffer_d[j] >= 'A' && buffer_d[j] <= 'Z') {
           buffer_d[j] += ('a' - 'A');
         }
       }
+      //DEBUG("buscar -> new buffer_d = \"%s\"", buffer_d);
       for (j = 0; j < SIZE_GRANDE && buffer_u[j] != 0 && buffer_d[j] != 0 &&
                   buffer_u[j] == buffer_d[j];
            j++) {
@@ -487,8 +497,10 @@ void buscar(int clientfd, char* registroCadena) {
 	      //error
 	      r = recv(clientfd, &test, sizeof(bool), 0);
 	      //error
-	      if(test) {
+	      DEBUG("buscar -> enviado : %lu - %s\nrecibido : %d", hash_table.id[i], buffer_d, test);
+	      if(!test) {
 		      fclose(archivo);
+		      free(mascota);
 		      return;
 	      }
       }
@@ -497,6 +509,7 @@ void buscar(int clientfd, char* registroCadena) {
   i = 0;
   r = send(clientfd, &i, sizeof(ulong), 0);
   fclose(archivo);
+  free(mascota);
 }
 
 // returns id ; hash_table[id] == key dice si existe

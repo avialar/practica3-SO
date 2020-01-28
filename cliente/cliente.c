@@ -42,10 +42,10 @@ void menu() {
     }
 
     if (p > '0' && p < '5') {
-	    r = connect(clientfd, (struct sockaddr_in*) &client, len);
+	    r = connect(clientfd, (const struct sockaddr*) &client, len);
 	    //error
 	    ERROR(r == -1, perror("connect"););
-	    printf("p = %c, r = %d, clientfd = %d\n", p, r, clientfd);
+	    DEBUG("p = %c, r = %d, clientfd = %d\n", p, r, clientfd);
 	    r = send(clientfd, &p, sizeof(char), 0);
 	    //error?
 	    ERROR(r == -1, perror("send"););
@@ -126,7 +126,6 @@ void ver(int clientfd) {
   ulong key;
   dogType* mascota;
   FILE* archivo;
-  pid_t pid;
   char l, command[] = TEXT_EDITOR" .tmp.txt", filename[] = ".tmp.txt", // linux -> .* = archivo oculto
 	  bufferArchivo[STRING_BUFFER], *s;  // 32 + 32 + 20 + 16 + (20 + 13 = 33) + 8
                              // (malo/femenino) + (22 + 5*7 = 22 + 35 = 57)
@@ -191,7 +190,7 @@ void ver(int clientfd) {
 	  DEBUG("ver -> despues de system");
 
 	  r = stat(filename, &statAfter);
-	  test = !(statBefore.st_mtim.tv_sec == statAfter.st_mtim.tv_sec);
+	  test = statBefore.st_mtim.tv_sec != statAfter.st_mtim.tv_sec;
 	  DEBUG("ver -> test=%d (%d == %d)", test, statBefore.st_mtim.tv_sec, statAfter.st_mtim.tv_sec);
 	  //enviar bool si tenemos que enviar command2?
 	  r = send(clientfd, &test, sizeof(bool), 0);
@@ -226,7 +225,7 @@ void borrar(int clientfd) {
          i);
   r = scanf("%ld", &key);
   ERROR(r == 0, perror("scanf"));
-  r = send(clientfd, &key, sizeof(int), 0);
+  r = send(clientfd, &key, sizeof(ulong), 0);
   //error
   r = recv(clientfd, &test, sizeof(bool), 0);
   //error
@@ -253,11 +252,12 @@ void buscar(int clientfd, struct termios termios_p_raw,
   tcsetattr(STDIN_FILENO, TCSANOW, &termios_p_raw);  // set term to raw
   setbuf(stdin, NULL);
   lineas = (window.ws_row - 1);  // leer las lineas del term
+  DEBUG("lineas = %d", lineas);
 
   while (test) {
 	  r = recv(clientfd, &key, sizeof(ulong), 0);
 	  //error
-	  if(key == 0) {
+	  if(key == 0) { // fin
 		  test = false;
 	  } else {
 		  r = recv(clientfd, buffer_u, sizeof(char) * SIZE_GRANDE, 0);
@@ -268,7 +268,7 @@ void buscar(int clientfd, struct termios termios_p_raw,
 			  r = getc(stdin);
 			  printf("\n\r");
 			  if (r == 'q') {
-				  test = true;
+				  test = false;
 				  r = send(clientfd, &test, sizeof(bool), 0);
 				  //error
 				  setbuf(stdin, buf);  // set buffer
@@ -278,6 +278,8 @@ void buscar(int clientfd, struct termios termios_p_raw,
 			  }
 			  k = 0;
 		  }
+		  r = send(clientfd, &test, sizeof(bool), 0);
+		  //DEBUG("buscar -> recibido : %lu - %s\nenviado : %d", key, buffer_u, test);
 	  }
   }
   setbuf(stdin, buf);

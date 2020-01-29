@@ -74,9 +74,9 @@ void menu() {
     printf("Cualquier tecla.\n");
     fflush(stdin);
     tcsetattr(STDIN_FILENO, TCSANOW, &termios_p_raw);
-    setbuf(stdin, NULL);
+    //setbuf(stdin, NULL);
     getc(stdin);
-    setbuf(stdin, buf);
+    //setbuf(stdin, buf);
     tcsetattr(STDIN_FILENO, TCSANOW, &termios_p_def);
   }
 }
@@ -175,7 +175,7 @@ void ver(int clientfd) {
 	  //if (pid == 0) {  // hijo
 	  //recibir command2
 	  archivo = fopen(filename, "w");
-	  for(r = recv(clientfd, bufferArchivo, STRING_BUFFER * sizeof(char), 0); bufferArchivo[0] != '\0'; r = recv(clientfd, bufferArchivo, STRING_BUFFER * sizeof(char), 0)) {
+	  for(r = recv(clientfd, bufferArchivo, STRING_BUFFER * sizeof(char), 0); bufferArchivo[0] != EOF; r = recv(clientfd, bufferArchivo, STRING_BUFFER * sizeof(char), 0)) {
 		  //error
 		  r = fputs(bufferArchivo, archivo);
 		  //error
@@ -191,7 +191,7 @@ void ver(int clientfd) {
 
 	  r = stat(filename, &statAfter);
 	  test = statBefore.st_mtim.tv_sec != statAfter.st_mtim.tv_sec;
-	  DEBUG("ver -> test=%d (%d == %d)", test, statBefore.st_mtim.tv_sec, statAfter.st_mtim.tv_sec);
+	  DEBUG("ver -> test=%d (%ld == %ld)", test, statBefore.st_mtim.tv_sec, statAfter.st_mtim.tv_sec);
 	  //enviar bool si tenemos que enviar command2?
 	  r = send(clientfd, &test, sizeof(bool), 0);
 	  if (test) {
@@ -200,7 +200,7 @@ void ver(int clientfd) {
 			  ERROR(s == NULL, perror("ver -> fgets"););
 			  r = send(clientfd, bufferArchivo, STRING_BUFFER * sizeof(char), 0);
 		  }
-		  sprintf(bufferArchivo, "");
+		  bufferArchivo[0] = EOF;
 		  r = send(clientfd, bufferArchivo, STRING_BUFFER * sizeof(char), 0); // EOF
 		  fclose(archivo);
 	  }
@@ -250,9 +250,9 @@ void buscar(int clientfd, struct termios termios_p_raw,
 
   fflush(stdin);
   tcsetattr(STDIN_FILENO, TCSANOW, &termios_p_raw);  // set term to raw
-  setbuf(stdin, NULL);
+  //setbuf(stdin, NULL);
   lineas = (window.ws_row - 1);  // leer las lineas del term
-  DEBUG("lineas = %d", lineas);
+  DEBUG("lineas = %lu", lineas);
 
   while (test) {
 	  r = recv(clientfd, &key, sizeof(ulong), 0);
@@ -271,7 +271,7 @@ void buscar(int clientfd, struct termios termios_p_raw,
 				  test = false;
 				  r = send(clientfd, &test, sizeof(bool), 0);
 				  //error
-				  setbuf(stdin, buf);  // set buffer
+				  //setbuf(stdin, buf);  // set buffer
 				  tcsetattr(STDIN_FILENO, TCSANOW,
 				            &termios_p_def);  // set back term to default
 				  return;
@@ -282,6 +282,6 @@ void buscar(int clientfd, struct termios termios_p_raw,
 		  //DEBUG("buscar -> recibido : %lu - %s\nenviado : %d", key, buffer_u, test);
 	  }
   }
-  setbuf(stdin, buf);
+  //setbuf(stdin, buf);
   tcsetattr(STDIN_FILENO, TCSANOW, &termios_p_def);
 }

@@ -35,7 +35,7 @@
     salir(EXIT_FAILURE);     \
   }
 
-#define DEBUG(a, ...) ;//printf(a, ##__VA_ARGS__); printf("\n");
+#define DEBUG(a, ...) printf(a, ##__VA_ARGS__); printf("\n");
 
 #define PROGRESSION(a, b, c, d)            \
   if (a % (b / d) == 0) {                  \

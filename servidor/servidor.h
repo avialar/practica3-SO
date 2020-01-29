@@ -7,10 +7,10 @@
 void menu();
 void *hilosfuncion(void *ap);
 void servidor();
-void ingresar(int clientfd, char* registroCadena);
-void ver(int clientfd, char* registroCadena);
-void borrar(int clientfd, char* registroCadena);
-void buscar(int clientfd, char* registroCadena);
+void ingresar(int clientfd, char* registroCadena, int n);
+void ver(int clientfd, char* registroCadena, int n);
+void borrar(int clientfd, char* registroCadena, int n);
+void buscar(int clientfd, char* registroCadena, int n);
 ulong hash(ulong key);  // In : key ; Out : id
 ulong new_hash(char* nombre);       // Out : key
 void ir_en_linea(FILE* archivo, ulong linea);
@@ -20,4 +20,5 @@ typedef struct threadArg_s {
 	int *clientfd;
 	struct sockaddr_in *client;
 	bool listo;
+	int *numero;
 } threadArg;

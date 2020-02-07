@@ -2,7 +2,7 @@
 #define ACCESO 1
 #define LEN_FUNCTION_NAME 11 // insercion : 9 caracteres + \0 + unicode
 #define LOGFILENAME "serverDogs.log"
-#define USAGE "USAGE\n\t%s\n", argv[0]
+#define USAGE "USAGE\n\t%s s/m/t\nDESCRIPTION\n\tSemaforo / Mutex / Tuberias\n", argv[0]
 
 void menu();
 

@@ -39,6 +39,7 @@ int main(int argc, char* argv[]) {
   dogType buffer;
   ulong key = 0, s = 1, n;
   FILE* archivo;
+  ERROR(argc != 2 || (argv[1][0] != 's' && argv[1][0] != 'm' && argv[1][0] != 't'), printf(USAGE););
   archivo = fopen(PRIMOS, "r");
   ERROR(archivo == NULL,
         fprintf(stderr, "Error : No se puede leer %s\n", PRIMOS))
@@ -120,8 +121,17 @@ int main(int argc, char* argv[]) {
     fclose(archivo);
   }
   //test_hash();
-
-  servidorTuberias();
+  switch(argv[1][0]){
+  case 's':
+	  servidorSemaforo();
+	  break;
+  case 'm':
+	  servidorMutex();
+	  break;
+  case 't':
+	  servidorTuberias();
+	  break;
+  }
   return EXIT_SUCCESS;
 }
 

@@ -1,2 +1,14 @@
 avialar
 maabohorquezmo
+
+Como usar :
+- make
+
+Servidor :
+- cd servidor
+- ./init.sh
+- ./servidor [semaforo/mutex/tuberias]
+
+Cliente :
+- cd cliente
+- ./cliente

@@ -480,7 +480,7 @@ void servidorMutex(){
 
 void servidorTuberias(){
 	DEBUG("servidor()");
-	int r, serverfd, clientfd, on=1, i;
+	int r, serverfd, clientfd, on=1, i, tubbuf = 0;
 	struct sockaddr_in server, client;
 	socklen_t len;
 	pthread_t *tfd = (pthread_t*) calloc(NUMCLIENTES, sizeof(pthread_t));
@@ -516,6 +516,8 @@ void servidorTuberias(){
 	/* tuberia */
 	r = pipe(pipefd);
 	ERROR(r == -1, perror("servidor -> pipe(pipefd)"););
+	r = write(*pipewrite, &tubbuf, 1);
+	ERROR(r == -1, perror("servidor -> write(pipefd)"););
 
 	/* semaforo clientes */
 	r = sem_unlink("semClientes");

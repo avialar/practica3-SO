@@ -1,9 +1,0 @@
-Nombre : 1
-Tipo : 2
-Edad : 3
-Raza : 4
-Estatura : 5
-Peso : 6.000000000000
-Sexo : otro
-
-Hola
